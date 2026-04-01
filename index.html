@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Points & Macros Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <style>
+        body { background-color: #f8fafc; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
+        .circle-progress { transform: rotate(-90deg); transition: stroke-dashoffset 0.5s ease; }
+        .hidden { display: none !important; }
+        .macro-pill { font-size: 0.65rem; padding: 2px 8px; border-radius: 99px; font-weight: 700; text-transform: uppercase; }
+        #interactive.viewport { width: 100%; height: 280px; overflow: hidden; border-radius: 1.5rem; background: #000; border: 4px solid #3b82f6; }
+        #interactive.viewport video { width: 100%; height: 100%; object-fit: cover; }
+    </style>
+</head>
+<body class="p-4 max-w-md mx-auto">
+
+    <div id="setup-view" class="bg-white rounded-3xl p-8 shadow-lg mt-10 hidden">
+        <h2 class="text-2xl font-bold mb-6 text-slate-800 text-center">Profile Setup</h2>
+        <div class="space-y-4">
+            <input id="u-name" type="text" placeholder="Name" class="w-full p-4 border rounded-xl bg-slate-50 outline-none">
+            <div class="grid grid-cols-2 gap-4">
+                <input id="u-age" type="number" placeholder="Age" class="p-4 border rounded-xl bg-slate-50 outline-none">
+                <select id="u-gender" class="p-4 border rounded-xl bg-slate-50 outline-none">
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                </select>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <input id="u-weight" type="number" placeholder="Weight (lbs)" class="p-4 border rounded-xl bg-slate-50 outline-none">
+                <div class="flex gap-2">
+                    <input id="u-ft" type="number" placeholder="ft" class="w-1/2 p-4 border rounded-xl bg-slate-50 outline-none">
+                    <input id="u-in" type="number" placeholder="in" class="w-1/2 p-4 border rounded-xl bg-slate-50 outline-none">
+                </div>
+            </div>
+            <button onclick="saveProfile()" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg">Save & Calculate</button>
+        </div>
+    </div>
+
+    <div id="app-view" class="hidden">
+        <div class="flex justify-between items-center mb-6">
+            <h1 id="greeting" class="text-xl font-bold text-slate-800 tracking-tight">Hello</h1>
+            <div class="flex gap-2">
+                <button onclick="toggleView('macro-manager')" class="p-2 bg-blue-100 rounded-full text-blue-600 text-xs font-bold">🛠 Macros</button>
+                <button onclick="resetData()" class="p-2 bg-slate-100 rounded-full text-slate-400">⚙️</button>
+            </div>
+        </div>
+
+        <div class="relative flex flex-col items-center justify-center bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-50 mb-6">
+            <svg class="w-40 h-40 circle-progress">
+                <circle cx="80" cy="80" r="72" stroke="#f1f5f9" stroke-width="12" fill="transparent" />
+                <circle id="progress-bar" cx="80" cy="80" r="72" stroke="#3b82f6" stroke-width="12" fill="transparent" stroke-dasharray="452" stroke-dashoffset="452" stroke-linecap="round" />
+            </svg>
+            <div class="absolute text-center">
+                <span id="pts-remaining" class="text-5xl font-black text-slate-800">--</span>
+                <p class="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Points Left</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <button onclick="toggleScanner()" class="bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg flex flex-col items-center">
+                <span class="text-xl mb-1">📷</span><span>Scan Barcode</span>
+            </button>
+            <button onclick="toggleView('quick-add-view')" class="bg-slate-800 text-white font-bold py-4 rounded-2xl shadow-lg flex flex-col items-center">
+                <span class="text-xl mb-1">⚡</span><span>Quick Add</span>
+            </button>
+        </div>
+
+        <div id="scanner-view" class="hidden mb-6 relative">
+            <div id="interactive" class="viewport"></div>
+            <button onclick="toggleScanner()" class="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full font-bold">✕</button>
+        </div>
+
+        <div id="quick-add-view" class="bg-white rounded-2xl p-6 shadow-sm border border-slate-50 mb-6">
+            <form action="javascript:void(0);" onsubmit="searchFood()">
+                <input id="f-name" type="search" inputmode="search" placeholder="Search (Press Search)..." class="w-full p-4 border rounded-xl bg-slate-50 outline-none mb-4 focus:ring-2 focus:ring-blue-400">
+            </form>
+            <div id="library-suggestions" class="flex flex-wrap gap-2 mb-4"></div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-4 text-[10px] font-bold text-slate-400 uppercase">
+                <div>Cals <input id="f-cal" type="number" oninput="updatePreview()" class="w-full p-3 border rounded-xl bg-slate-100 mt-1 outline-none text-slate-800"></div>
+                <div>Pro (g) <input id="f-pro" type="number" oninput="updatePreview()" class="w-full p-3 border rounded-xl bg-slate-100 mt-1 outline-none text-slate-800"></div>
+                <div>Sug (g) <input id="f-sug" type="number" oninput="updatePreview()" class="w-full p-3 border rounded-xl bg-slate-100 mt-1 outline-none text-slate-800"></div>
+                <div>Fat (g) <input id="f-fat" type="number" oninput="updatePreview()" class="w-full p-3 border rounded-xl bg-slate-100 mt-1 outline-none text-slate-800"></div>
+            </div>
+            <div class="flex justify-between items-center bg-blue-50 p-4 rounded-xl">
+                <span id="preview-pts" class="text-blue-600 font-black text-xl">0 PTS</span>
+                <button onclick="logNutrients()" class="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold">Log Food</button>
+            </div>
+        </div>
+
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-slate-800">History Log</h3>
+            <input type="date" id="history-date" onchange="updateUI()" class="text-xs border p-2 rounded-lg bg-white">
+        </div>
+        <div id="log-container" class="space-y-3 pb-24"></div>
+    </div>
+
+    <script>
+        var profile = JSON.parse(localStorage.getItem('ww_profile'));
+        var masterLog = JSON.parse(localStorage.getItem('ww_master_log')) || [];
+        var customLibrary = JSON.parse(localStorage.getItem('ww_library')) || [];
+
+        function saveProfile() {
+            const age = parseInt(document.getElementById('u-age').value) || 0;
+            const weight = parseInt(document.getElementById('u-weight').value) || 0;
+            const gender = document.getElementById('u-gender').value;
+            const ft = parseInt(document.getElementById('u-ft').value) || 0;
+            const inch = parseInt(document.getElementById('u-in').value) || 0;
+            const h = (ft * 12) + inch;
+            let budget = (gender === 'male') ? 
+                Math.round((weight * 0.1) + (h * 0.1) + (age * 0.05) - 0.65) : 
+                Math.round((weight * 0.09) + (h * 0.15) - (age * 0.05) + 2.77);
+            profile = { name: document.getElementById('u-name').value, budget };
+            localStorage.setItem('ww_profile', JSON.stringify(profile));
+            window.location.reload();
+        }
+
+        async function searchFood(customCode = null) {
+            const query = customCode || document.getElementById('f-name').value;
+            if (query.length < 3) return;
+            document.getElementById('preview-pts').innerText = "...";
+            try {
+                const url = customCode ? 
+                    `https://world.openfoodfacts.org/api/v0/product/${query}.json` : 
+                    `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=1`;
+                const res = await fetch(url);
+                const data = await res.json();
+                const product = customCode ? data.product : data.products?.[0];
+                if (product) {
+                    const p = product.nutriments;
+                    document.getElementById('f-cal').value = Math.round(p['energy-kcal_100g'] || 0);
+                    document.getElementById('f-pro').value = Math.round(p['proteins_100g'] || 0);
+                    document.getElementById('f-sug').value = Math.round(p['sugars_100g'] || 0);
+                    document.getElementById('f-fat').value = Math.round(p['saturated-fat_100g'] || 0);
+                    if(customCode) document.getElementById('f-name').value = product.product_name || "Scanned Item";
+                    updatePreview();
+                } else { document.getElementById('preview-pts').innerText = "Not Found"; }
+            } catch (e) { document.getElementById('preview-pts').innerText = "CORS ERR"; }
+        }
+
+        function updatePreview() {
+            const c = parseFloat(document.getElementById('f-cal').value) || 0;
+            const p = parseFloat(document.getElementById('f-pro').value) || 0;
+            const s = parseFloat(document.getElementById('f-sug').value) || 0;
+            const f = parseFloat(document.getElementById('f-fat').value) || 0;
+            let pts = Math.max(0, Math.round((c / 50) + (f / 12) + (s / 10) - (p / 20)));
+            document.getElementById('preview-pts').innerText = pts + " PTS";
+            return { pts, c, p, s, f };
+        }
+
+        function toggleScanner() {
+            const v = document.getElementById('scanner-view');
+            if(v.classList.contains('hidden')) {
+                v.classList.remove('hidden');
+                // Request camera with high-res and environment constraints
+                Quagga.init({ 
+                    inputStream: { 
+                        type: "LiveStream", 
+                        target: document.querySelector('#interactive'),
+                        constraints: { width: 640, height: 480, facingMode: "environment" }
+                    }, 
+                    decoder: { readers: ["upc_reader","ean_reader"] } 
+                }, (err) => { 
+                    if(err) { alert("Camera error: Ensure you are on HTTPS or a secure server."); return; }
+                    Quagga.start(); 
+                });
+                Quagga.onDetected((data) => { toggleScanner(); searchFood(data.codeResult.code); });
+            } else { Quagga.stop(); v.classList.add('hidden'); }
+        }
+
+        function toggleView(id) { document.getElementById(id).classList.toggle('hidden'); }
+        function resetData() { if(confirm("Reset profile?")) { localStorage.clear(); window.location.reload(); } }
+        
+        window.onload = function() {
+            if(!profile) document.getElementById('setup-view').classList.remove('hidden');
+            else {
+                document.getElementById('app-view').classList.remove('hidden');
+                document.getElementById('greeting').innerText = "Hello, " + profile.name;
+                document.getElementById('history-date').value = new Date().toISOString().split('T')[0];
+                updateUI();
+            }
+        };
+
+        function updateUI() {
+            const date = document.getElementById('history-date').value || new Date().toISOString().split('T')[0];
+            const dayEntries = masterLog.filter(e => e.date === date);
+            const used = dayEntries.reduce((sum, e) => sum + e.pts, 0);
+            document.getElementById('pts-remaining').innerText = profile.budget - used;
+            document.getElementById('progress-bar').style.strokeDashoffset = 452 * (1 - ((profile.budget - used) / profile.budget));
+            let html = '';
+            dayEntries.slice().reverse().forEach((e) => {
+                html += `<div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center mb-2">
+                    <div><p class="font-bold text-slate-800">${e.name}</p>
+                    <div class="flex gap-1 mt-1">
+                        <span class="macro-pill bg-blue-50 text-blue-600">P:${e.p}</span>
+                        <span class="macro-pill bg-orange-50 text-orange-600">S:${e.s}</span>
+                        <span class="macro-pill bg-red-50 text-red-600">F:${e.f}</span>
+                    </div></div>
+                    <p class="font-black text-blue-600">${e.pts} pts</p>
+                </div>`;
+            });
+            document.getElementById('log-container').innerHTML = html || '<p class="text-center text-slate-300 py-10">No items tracked.</p>';
+        }
+
+        function logNutrients() {
+            const entry = {
+                name: document.getElementById('f-name').value || "Quick Log",
+                ...updatePreview(),
+                date: new Date().toISOString().split('T')[0],
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            masterLog.push(entry);
+            localStorage.setItem('ww_master_log', JSON.stringify(masterLog));
+            window.location.reload();
+        }
+    </script>
+</body>
+</html>
