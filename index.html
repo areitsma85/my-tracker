@@ -70,14 +70,13 @@
 
         <div id="scanner-view" class="hidden mb-6 relative">
             <div id="interactive" class="viewport"></div>
-            <button onclick="toggleScanner()" class="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full font-bold">✕</button>
+            <button onclick="toggleScanner()" class="absolute -top-2 -right-2 bg-red-500 text-white w-8 h-8 rounded-full font-bold shadow-lg">✕</button>
         </div>
 
         <div id="quick-add-view" class="bg-white rounded-2xl p-6 shadow-sm border border-slate-50 mb-6">
             <form action="javascript:void(0);" onsubmit="searchFood()">
                 <input id="f-name" type="search" inputmode="search" placeholder="Search (Press Search)..." class="w-full p-4 border rounded-xl bg-slate-50 outline-none mb-4 focus:ring-2 focus:ring-blue-400">
             </form>
-            <div id="library-suggestions" class="flex flex-wrap gap-2 mb-4"></div>
             
             <div class="grid grid-cols-2 gap-4 mb-4 text-[10px] font-bold text-slate-400 uppercase">
                 <div>Cals <input id="f-cal" type="number" oninput="updatePreview()" class="w-full p-3 border rounded-xl bg-slate-100 mt-1 outline-none text-slate-800"></div>
@@ -91,54 +90,56 @@
             </div>
         </div>
 
-        <div class="flex justify-between items-center mb-4">
-            <h3 class="font-bold text-slate-800">History Log</h3>
-            <input type="date" id="history-date" onchange="updateUI()" class="text-xs border p-2 rounded-lg bg-white">
-        </div>
         <div id="log-container" class="space-y-3 pb-24"></div>
     </div>
 
     <script>
         var profile = JSON.parse(localStorage.getItem('ww_profile'));
         var masterLog = JSON.parse(localStorage.getItem('ww_master_log')) || [];
-        var customLibrary = JSON.parse(localStorage.getItem('ww_library')) || [];
 
         function saveProfile() {
             const age = parseInt(document.getElementById('u-age').value) || 0;
             const weight = parseInt(document.getElementById('u-weight').value) || 0;
             const gender = document.getElementById('u-gender').value;
-            const ft = parseInt(document.getElementById('u-ft').value) || 0;
-            const inch = parseInt(document.getElementById('u-in').value) || 0;
-            const h = (ft * 12) + inch;
+            const h = (parseInt(document.getElementById('u-ft').value) * 12) + parseInt(document.getElementById('u-in').value);
+            
             let budget = (gender === 'male') ? 
                 Math.round((weight * 0.1) + (h * 0.1) + (age * 0.05) - 0.65) : 
                 Math.round((weight * 0.09) + (h * 0.15) - (age * 0.05) + 2.77);
+
             profile = { name: document.getElementById('u-name').value, budget };
             localStorage.setItem('ww_profile', JSON.stringify(profile));
             window.location.reload();
         }
 
-        async function searchFood(customCode = null) {
-            const query = customCode || document.getElementById('f-name').value;
+        // BYPASS CORS WITH JSONP CALLBACK
+        function searchFood(code = null) {
+            const query = code || document.getElementById('f-name').value;
             if (query.length < 3) return;
             document.getElementById('preview-pts').innerText = "...";
-            try {
-                const url = customCode ? 
-                    `https://world.openfoodfacts.org/api/v0/product/${query}.json` : 
-                    `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=1`;
-                const res = await fetch(url);
-                const data = await res.json();
-                const product = customCode ? data.product : data.products?.[0];
-                if (product) {
-                    const p = product.nutriments;
-                    document.getElementById('f-cal').value = Math.round(p['energy-kcal_100g'] || 0);
-                    document.getElementById('f-pro').value = Math.round(p['proteins_100g'] || 0);
-                    document.getElementById('f-sug').value = Math.round(p['sugars_100g'] || 0);
-                    document.getElementById('f-fat').value = Math.round(p['saturated-fat_100g'] || 0);
-                    if(customCode) document.getElementById('f-name').value = product.product_name || "Scanned Item";
+
+            const callbackName = 'off_callback_' + Math.floor(Math.random() * 100000);
+            window[callbackName] = function(data) {
+                const p = code ? data.product : data.products?.[0];
+                if (p) {
+                    const n = p.nutriments;
+                    document.getElementById('f-cal').value = Math.round(n['energy-kcal_100g'] || 0);
+                    document.getElementById('f-pro').value = Math.round(n['proteins_100g'] || 0);
+                    document.getElementById('f-sug').value = Math.round(n['sugars_100g'] || 0);
+                    document.getElementById('f-fat').value = Math.round(n['saturated-fat_100g'] || 0);
+                    if(code) document.getElementById('f-name').value = p.product_name || "Scanned Item";
                     updatePreview();
                 } else { document.getElementById('preview-pts').innerText = "Not Found"; }
-            } catch (e) { document.getElementById('preview-pts').innerText = "CORS ERR"; }
+                delete window[callbackName];
+                document.getElementById(callbackName).remove();
+            };
+
+            const script = document.createElement('script');
+            script.id = callbackName;
+            script.src = code ? 
+                `https://world.openfoodfacts.org/api/v0/product/${code}.json?callback=${callbackName}` : 
+                `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&callback=${callbackName}`;
+            document.head.appendChild(script);
         }
 
         function updatePreview() {
@@ -151,42 +152,19 @@
             return { pts, c, p, s, f };
         }
 
-        function toggleScanner() {
-            const v = document.getElementById('scanner-view');
-            if(v.classList.contains('hidden')) {
-                v.classList.remove('hidden');
-                // Request camera with high-res and environment constraints
-                Quagga.init({ 
-                    inputStream: { 
-                        type: "LiveStream", 
-                        target: document.querySelector('#interactive'),
-                        constraints: { width: 640, height: 480, facingMode: "environment" }
-                    }, 
-                    decoder: { readers: ["upc_reader","ean_reader"] } 
-                }, (err) => { 
-                    if(err) { alert("Camera error: Ensure you are on HTTPS or a secure server."); return; }
-                    Quagga.start(); 
-                });
-                Quagga.onDetected((data) => { toggleScanner(); searchFood(data.codeResult.code); });
-            } else { Quagga.stop(); v.classList.add('hidden'); }
+        function logNutrients() {
+            masterLog.push({
+                name: document.getElementById('f-name').value || "Quick Log",
+                ...updatePreview(),
+                date: new Date().toISOString().split('T')[0],
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+            localStorage.setItem('ww_master_log', JSON.stringify(masterLog));
+            window.location.reload();
         }
 
-        function toggleView(id) { document.getElementById(id).classList.toggle('hidden'); }
-        function resetData() { if(confirm("Reset profile?")) { localStorage.clear(); window.location.reload(); } }
-        
-        window.onload = function() {
-            if(!profile) document.getElementById('setup-view').classList.remove('hidden');
-            else {
-                document.getElementById('app-view').classList.remove('hidden');
-                document.getElementById('greeting').innerText = "Hello, " + profile.name;
-                document.getElementById('history-date').value = new Date().toISOString().split('T')[0];
-                updateUI();
-            }
-        };
-
         function updateUI() {
-            const date = document.getElementById('history-date').value || new Date().toISOString().split('T')[0];
-            const dayEntries = masterLog.filter(e => e.date === date);
+            const dayEntries = masterLog.filter(e => e.date === new Date().toISOString().split('T')[0]);
             const used = dayEntries.reduce((sum, e) => sum + e.pts, 0);
             document.getElementById('pts-remaining').innerText = profile.budget - used;
             document.getElementById('progress-bar').style.strokeDashoffset = 452 * (1 - ((profile.budget - used) / profile.budget));
@@ -202,20 +180,29 @@
                     <p class="font-black text-blue-600">${e.pts} pts</p>
                 </div>`;
             });
-            document.getElementById('log-container').innerHTML = html || '<p class="text-center text-slate-300 py-10">No items tracked.</p>';
+            document.getElementById('log-container').innerHTML = html || '<p class="text-center text-slate-300 py-10">No items tracked today.</p>';
         }
 
-        function logNutrients() {
-            const entry = {
-                name: document.getElementById('f-name').value || "Quick Log",
-                ...updatePreview(),
-                date: new Date().toISOString().split('T')[0],
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            masterLog.push(entry);
-            localStorage.setItem('ww_master_log', JSON.stringify(masterLog));
-            window.location.reload();
+        function toggleScanner() {
+            const v = document.getElementById('scanner-view');
+            if(v.classList.contains('hidden')) {
+                v.classList.remove('hidden');
+                Quagga.init({ inputStream: { type: "LiveStream", target: document.querySelector('#interactive'), constraints: { facingMode: "environment" } }, decoder: { readers: ["upc_reader","ean_reader"] } }, (err) => { if(!err) Quagga.start(); });
+                Quagga.onDetected((res) => { if(res.codeResult.code) { toggleScanner(); searchFood(res.codeResult.code); } });
+            } else { Quagga.stop(); v.classList.add('hidden'); }
         }
+
+        function toggleView(id) { document.getElementById(id).classList.toggle('hidden'); }
+        function resetData() { if(confirm("Reset profile?")) { localStorage.clear(); window.location.reload(); } }
+
+        window.onload = function() {
+            if(!profile) document.getElementById('setup-view').classList.remove('hidden');
+            else {
+                document.getElementById('app-view').classList.remove('hidden');
+                document.getElementById('greeting').innerText = "Hello, " + profile.name;
+                updateUI();
+            }
+        };
     </script>
 </body>
 </html>
