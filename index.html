@@ -43,7 +43,6 @@
         <div class="flex justify-between items-center mb-6">
             <h1 id="greeting" class="text-xl font-bold text-slate-800 tracking-tight">Hello</h1>
             <div class="flex gap-2">
-                <button onclick="toggleView('macro-manager')" class="p-2 bg-blue-100 rounded-full text-blue-600 text-xs font-bold">🛠 Macros</button>
                 <button onclick="resetData()" class="p-2 bg-slate-100 rounded-full text-slate-400">⚙️</button>
             </div>
         </div>
@@ -74,9 +73,7 @@
         </div>
 
         <div id="quick-add-view" class="bg-white rounded-2xl p-6 shadow-sm border border-slate-50 mb-6">
-            <form action="javascript:void(0);" onsubmit="searchFood()">
-                <input id="f-name" type="search" inputmode="search" placeholder="Search (Press Search)..." class="w-full p-4 border rounded-xl bg-slate-50 outline-none mb-4 focus:ring-2 focus:ring-blue-400">
-            </form>
+            <input id="f-name" type="text" placeholder="Type Food (Auto-Search)..." class="w-full p-4 border rounded-xl bg-slate-50 outline-none mb-4 focus:ring-2 focus:ring-blue-400">
             
             <div class="grid grid-cols-2 gap-4 mb-4 text-[10px] font-bold text-slate-400 uppercase">
                 <div>Cals <input id="f-cal" type="number" oninput="updatePreview()" class="w-full p-3 border rounded-xl bg-slate-100 mt-1 outline-none text-slate-800"></div>
@@ -96,23 +93,27 @@
     <script>
         var profile = JSON.parse(localStorage.getItem('ww_profile'));
         var masterLog = JSON.parse(localStorage.getItem('ww_master_log')) || [];
+        var searchTimer;
 
         function saveProfile() {
             const age = parseInt(document.getElementById('u-age').value) || 0;
             const weight = parseInt(document.getElementById('u-weight').value) || 0;
             const gender = document.getElementById('u-gender').value;
             const h = (parseInt(document.getElementById('u-ft').value) * 12) + parseInt(document.getElementById('u-in').value);
-            
             let budget = (gender === 'male') ? 
                 Math.round((weight * 0.1) + (h * 0.1) + (age * 0.05) - 0.65) : 
                 Math.round((weight * 0.09) + (h * 0.15) - (age * 0.05) + 2.77);
-
             profile = { name: document.getElementById('u-name').value, budget };
             localStorage.setItem('ww_profile', JSON.stringify(profile));
             window.location.reload();
         }
 
-        // BYPASS CORS WITH JSONP CALLBACK
+        // DEBOUNCE AUTO-SEARCH
+        document.getElementById('f-name').addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => searchFood(), 600);
+        });
+
         function searchFood(code = null) {
             const query = code || document.getElementById('f-name').value;
             if (query.length < 3) return;
@@ -129,7 +130,7 @@
                     document.getElementById('f-fat').value = Math.round(n['saturated-fat_100g'] || 0);
                     if(code) document.getElementById('f-name').value = p.product_name || "Scanned Item";
                     updatePreview();
-                } else { document.getElementById('preview-pts').innerText = "Not Found"; }
+                } else { document.getElementById('preview-pts').innerText = "NONE"; }
                 delete window[callbackName];
                 document.getElementById(callbackName).remove();
             };
